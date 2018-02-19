@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	r "github.com/dancannon/gorethink"
+	"github.com/dancannon/gorethink"
 	"github.com/gorilla/websocket"
 	"net/http"
 )
