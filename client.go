@@ -1,87 +1,63 @@
 package main
 
 import (
-	r "github.com/dancannon/gorethink"
-	"github.com/gorilla/websocket"
-	"log"
+  "fmt"
+  "time"
+  "math/rand"
 )
 
-type FindHandler func(string) (Handler, bool)
+type Message struct {
+  Name string       `json:"name"`
+  Data interface{}  `json:"data"`
+}
 
 type Client struct {
-	send         chan Message
-	socket       *websocket.Conn
-	findHandler  FindHandler
-	session      *r.Session
-	stopChannels map[int]chan bool
-	id           string
-	userName     string
+  send chan Message
 }
 
-func (c *Client) NewStopChannel(stopKey int) chan bool {
-	c.StopForKey(stopKey)
-	stop := make(chan bool)
-	c.stopChannels[stopKey] = stop
-	return stop
+func (client *Client) write(){
+  for msg := range client.send {
+    //TODO : socket.sendJSON(msg)
+    fmt.Printf("%#v\n", msg)
+  }
 }
 
-func (c *Client) StopForKey(key int) {
-	if ch, found := c.stopChannels[key]; found {
-		ch <- true
-		delete(c.stopChannels, key)
-	}
+func (client *Client) subscribeChannels() {
+  for {
+    time.Sleep(r())
+    client.send <- Message{"channel add", ""}
+  }
 }
 
-func (client *Client) Read() {
-	var message Message
-	for {
-		if err := client.socket.ReadJSON(&message); err != nil {
-			break
-		}
-		if handler, found := client.findHandler(message.Name); found {
-			handler(client, message.Data)
-		}
-	}
-	client.socket.Close()
+func (client *Client) subscribeMessages() {
+  for {
+    time.Sleep(r())
+    client.send <- Message{"message add", ""}
+  }
 }
 
-func (client *Client) Write() {
-	for msg := range client.send {
-		if err := client.socket.WriteJSON(msg); err != nil {
-			break
-		}
-	}
-	client.socket.Close()
+func r() time.Duration {
+  return time.Millisecond * time.Duration(rand.Intn(1000))
 }
 
-func (c *Client) Close() {
-	for _, ch := range c.stopChannels {
-		ch <- true
-	}
-	close(c.send)
-	// delete user
-	r.Table("user").Get(c.id).Delete().Exec(c.session)
+func NewClient() *Client{
+  return &Client{
+    send: make(chan Message),
+  }
 }
 
-func NewClient(socket *websocket.Conn, findHandler FindHandler,
-	session *r.Session) *Client {
-	var user User
-	user.Name = "anonymous"
-	res, err := r.Table("user").Insert(user).RunWrite(session)
-	if err != nil {
-		log.Println(err.Error())
-	}
-	var id string
-	if len(res.GeneratedKeys) > 0 {
-		id = res.GeneratedKeys[0]
-	}
-	return &Client{
-		send:         make(chan Message),
-		socket:       socket,
-		findHandler:  findHandler,
-		session:      session,
-		stopChannels: make(map[int]chan bool),
-		id:           id,
-		userName:     user.Name,
-	}
+func main() {
+  client := NewClient()
+  go client.subscribeChannels()
+  go client.subscribeMessages()
+  client.write()
 }
+
+
+// msgChan := make(chan string)
+// go func() {
+//   msgChan <- "Hello"
+//   }()
+//
+// msg := <-msgChan
+// fmt.Println(msg)
