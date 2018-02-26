@@ -2,6 +2,7 @@ package main
 
 import (
   "github.com/gorilla/websocket"
+  r "github.com/dancannon/gorethink"
 )
 
 type FindHandler func(string) (Handler, bool)
@@ -15,22 +16,23 @@ type Client struct {
   send        chan Message
   socket      *websocket.Conn
   findHandler FindHandler
+  session     *r.Session
 }
 
-func (client *Client) Read(){
+func (client *Client) Read() {
   var message Message
   for {
     if err := client.socket.ReadJSON(&message); err != nil {
       break
     }
-  }
-  if handler, found := client.findHandler(message.Name); found {
-    handler(client, message.Data)
+    if handler, found := client.findHandler(message.Name); found {
+      handler(client, message.Data)
+    }
   }
   client.socket.Close()
 }
 
-func (client *Client) Write(){
+func (client *Client) Write() {
   for msg := range client.send {
     if err := client.socket.WriteJSON(msg); err != nil {
       break
@@ -39,10 +41,12 @@ func (client *Client) Write(){
   client.socket.Close()
 }
 
-func NewClient(socket *websocket.Conn, findHandler FindHandler) *Client{
+func NewClient(socket *websocket.Conn, findHandler FindHandler,
+  session *r.Session) *Client{
   return &Client{
     send: make(chan Message),
     socket: socket,
     findHandler: findHandler,
+    session: session,
   }
 }
